@@ -7,7 +7,6 @@ fi
 
 ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
 
-
 if [ -f /etc/debian_version ]; then
     echo "The operating system is Debian, continuing"
 else
@@ -15,110 +14,142 @@ else
     exit 1
 fi
 
-version=$(cat /etc/os-release | grep VERSION_ID | cut -d '"' -f 2)
+# Get the current Debian codename
+codename=$(lsb_release -cs)
 
-if [ $version = "11" ]; then
-    echo "------------ UPDATING SOURCE.LIST FOR BULLSEYE -----------"
-    cat > /etc/apt/sources.list << "EOF"
-	deb http://deb.debian.org/debian bullseye main
-	deb-src http://deb.debian.org/debian bullseye main
+echo "------------ UPDATING SOURCE.LIST FOR $codename -----------"
+cat > /etc/apt/sources.list << EOF
+deb http://deb.debian.org/debian $codename main
+deb-src http://deb.debian.org/debian $codename main
 
-	deb http://deb.debian.org/debian-security/ bullseye-security main
-	deb-src http://deb.debian.org/debian-security/ bullseye-security main
+deb http://deb.debian.org/debian-security/ $codename-security main
+deb-src http://deb.debian.org/debian-security/ $codename-security main
 
-	deb http://deb.debian.org/debian bullseye-updates main
-	deb-src http://deb.debian.org/debian bullseye-updates main
-	EOF
+deb http://deb.debian.org/debian $codename-updates main
+deb-src http://deb.debian.org/debian $codename-updates main
+EOF
+
+apt-get update && apt-get dist-upgrade && apt-get autoremove && apt-get autoclean
+apt-get install -y aria2 git vim curl wget
+
+
+#!/bin/bash
+
+# Function to install Whonix
+install_whonix() {
+    echo "------------ GETTING WHONIX KEYS -----------"
+    wget https://www.kicksecure.com/derivative.asc
+    cp ./derivative.asc /usr/share/keyrings/derivative.asc
+    sudo apt-key --keyring /etc/apt/trusted.gpg.d/whonix.gpg add ./derivative.asc
+    echo "deb https://deb.whonix.org bullseye main contrib non-free" | sudo tee /etc/apt/sources.list.d/whonix.list
+}
+
+# Function to install Kicksecure
+install_kicksecure() {
+    echo "------------ GETTING KICKSECURE KEYS -----------"
+    curl --tlsv1.3 --proto =https --max-time 180 --output ~/derivative.asc https://www.kicksecure.com/keys/derivative.asc
+    mv ~/derivative.asc /usr/share/keyrings/derivative.asc
+    echo "deb [signed-by=/usr/share/keyrings/derivative.asc] https://deb.kicksecure.com bullseye main contrib non-free" | sudo tee /etc/apt/sources.list.d/derivative.list
+}
+
+# Function to install Brave
+install_brave() {
+    echo "------------ GETTING BRAVE KEYS -----------"
+    curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" | sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+}
+
+# Function to install Codium
+install_codium() {
+    echo "------------ GETTING CODIUM KEYS -----------"
+    wget -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg | gpg --dearmor | sudo dd of=/usr/share/keyrings/vscodium-archive-keyring.gpg
+    echo 'deb [signed-by=/usr/share/keyrings/vscodium-archive-keyring.gpg] https://download.vscodium.com/debs vscodium main' | sudo tee /etc/apt/sources.list.d/vscodium.list
+}
+
+# Function to prompt user for a yes/no answer
+ask_user() {
+    local prompt=$1
+    while true; do
+        read -p "$prompt [y/n]: " yn
+        case $yn in
+            [Yy]* ) return 0;;
+            [Nn]* ) return 1;;
+            * ) echo "Please answer yes or no.";;
+        esac
+    done
+}
+
+# Prompt the user for each repository installation
+if ask_user "Do you want to install Whonix repository?"; then
+    install_whonix
 fi
 
-sudo apt-get update && sudo apt-get dist-upgrade && sudo apt-get autoremove && sudo apt-get autoclean
-apt-get install -y aria2 bash-completion exfat-fuse git vim curl wget
+if ask_user "Do you want to install Kicksecure repository?"; then
+    install_kicksecure
+fi
 
+if ask_user "Do you want to install Brave repository?"; then
+    install_brave
+fi
 
-echo "What package repos do you want to install ?"
-echo "1) Whonix"
-echo "2) Kicksecure"
-echo "3) Brave"
-echo "4) Codium"
-echo "5) Oxen"
-
-read -p "Enter the numbers corresponding to the choices, separated by commas:" choices
-
-IFS=',' read -ra choices_array <<< "$choices"
-
-for choice in "${choices_array[@]}"
-do
-    case $choice in
-        1)
-            echo "------------ GETTING WHONIX KEYS -----------"
-            wget https://www.kicksecure.com/derivative.asc
-            cp ./derivative.asc /usr/share/keyrings/derivative.asc
-            sudo apt-key --keyring /etc/apt/trusted.gpg.d/whonix.gpg add ./derivative.asc
-	        echo "deb https://deb.whonix.org bullseye main contrib non-free" | sudo tee /etc/apt/sources.list.d/whonix.list
-            ;;
-        2)
-	        curl --tlsv1.3 --proto =https --max-time 180 --output ~/derivative.asc https://www.kicksecure.com/keys/derivative.asc
-	        mv ~/derivative.asc /usr/share/keyrings/derivative.asc
-	        echo "deb [signed-by=/usr/share/keyrings/derivative.asc] https://deb.kicksecure.com bullseye main contrib non-free" | sudo tee /etc/apt/sources.list.d/derivative.list
-            ;;
-        3)
-            echo "------------ GETTING BRAVE KEYS -----------"
-            curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
-            echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main"| tee /etc/apt/sources.list.d/brave-browser-release.list
-            ;;
-        4)
-            echo "------------ GETTING CODIUM KEYS -----------"
-            wget -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg     | gpg --dearmor     | dd of=/usr/share/keyrings/vscodium-archive-keyring.gpg
-            echo 'deb [ signed-by=/usr/share/keyrings/vscodium-archive-keyring.gpg ] https://download.vscodium.com/debs vscodium main'     | tee /etc/apt/sources.list.d/vscodium.list
-            ;;
-        5)
-            echo "------------ GETTING OXEN KEYS -----------"
-            curl -so /etc/apt/trusted.gpg.d/oxen.gpg https://deb.oxen.io/pub.gpg
-            echo "deb https://deb.oxen.io bullseye main" | tee /etc/apt/sources.list.d/oxen.list
-            ;;
-        *)
-            echo "Choix invalide : $choice"
-            ;;
-    esac
-done
-
+if ask_user "Do you want to install Codium repository?"; then
+    install_codium
+fi
 
 echo "------------UPDATING WITH NEW SOURCES.LIST + INSTALLING -----------"
 sudo apt-get update && sudo apt-get dist-upgrade && sudo apt-get autoremove && sudo apt-get autoclean
 
-
+# Prompt the user for package installation type
 echo "Which installation do you want to do?"
 echo "1) NORMAL (Extensive list of packages required to compile/build projects)"
 echo "2) EXTRA (Desktop, thunderbird)"
-read choice
+echo "3) BOTH (Install both NORMAL and EXTRA)"
+read -p "Enter 1, 2, or 3: " choice
 
-if [ $choice = "1" ]; then
-    sudo apt-get install -y mosh macchanger jitterentropy-rngd hddtemp lm-sensors htop tree hardened-kernel bison build-essential curl git gnat libncurses5-dev m4 zlib1g-dev build-essential zlib1g-dev uuid-dev libdigest-sha-perl libelf-dev bc bzip2 bison flex git gnupg gawk iasl m4 nasm patch python python2 python3 wget gnat cpio ccache pkg-config cmake libusb-1.0-0-dev autoconf texinfo ncurses-dev doxygen graphviz udev libudev1 libudev-dev automake libtool rsync innoextract sudo libssl-dev device-tree-compiler u-boot-tools
-	if [ -f /etc/apt/sources.list.d/whonix.list ]; then
-	    sudo apt install kloak hardened-malloc
-	fi
-fi
+# Installing packages for NORMAL setup
+install_normal() {
+    sudo apt-get install -y mosh macchanger jitterentropy-rngd lm-sensors htop tree bison build-essential curl git gnat libncurses5-dev m4 zlib1g-dev build-essential zlib1g-dev uuid-dev libdigest-sha-perl libelf-dev bc bzip2 bison flex git gnupg gawk iasl m4 nasm patch python-is-python3 2to3 python3 wget gnat cpio ccache pkg-config cmake libusb-1.0-0-dev autoconf texinfo ncurses-dev doxygen graphviz udev libudev1 libudev-dev automake libtool rsync innoextract sudo libssl-dev device-tree-compiler u-boot-tools
 
-if [ $choice = "2" ]; then
-	sudo apt install ristretto thunderbird keepassxc fortunes vlc evince gedit qbittorrent gparted bleachbit ffmpeg fish fzf gedit
-	if [ -f /etc/apt/sources.list.d/brave-browser-release.list ]; then
-		sudo apt install brave-browser
+    if [ -f /etc/apt/sources.list.d/whonix.list ]; then
+        sudo apt install kloak hardened-malloc
     fi
-	if [ -f /etc/apt/sources.list.d/vscodium.list ]; then		
-		sudo apt install codium
-	fi
-    if [ -f /etc/apt/sources.list.d/oxen.list ]; then
-		sudo apt install oxen-electron-wallet session-desktop
-	fi
-    if [[ -f /etc/apt/sources.list.d/oxen.list && dpkg -s systemd >/dev/null 2>&1 ]]; then
-    	sudo apt install lokinet lokinet-gui
+}
+
+# Installing packages for EXTRA setup
+install_extra() {
+    sudo apt install ristretto thunderbird keepassxc fortunes vlc evince gedit qbittorrent gparted bleachbit ffmpeg fish fzf gedit
+
+    if [ -f /etc/apt/sources.list.d/brave-browser-release.list ]; then
+        sudo apt install brave-browser
     fi
 
-	desktop_environment=$(echo "$XDG_CURRENT_DESKTOP" | tr '[:upper:]' '[:lower:]')
-    if [[ $desktop_environment = "xfce" && $desktop_environment = "lxqt" && $desktop_environment = "lxde" ]]; then
-        	sudo apt install xscreensaver xscreensaver-data-extra lightdm-gtk-greeter-settings
+    if [ -f /etc/apt/sources.list.d/vscodium.list ]; then
+        sudo apt install codium
     fi
-fi
+
+    desktop_environment=$(echo "$XDG_CURRENT_DESKTOP" | tr '[:upper:]' '[:lower:]')
+    if [[ $desktop_environment == "xfce" || $desktop_environment == "lxqt" || $desktop_environment == "lxde" ]]; then
+        sudo apt install xscreensaver xscreensaver-data-extra lightdm-gtk-greeter-settings
+    fi
+}
+
+# Handle user's choice
+case $choice in
+    1)
+        install_normal
+        ;;
+    2)
+        install_extra
+        ;;
+    3)
+        install_normal
+        install_extra
+        ;;
+    *)
+        echo "Invalid choice"
+        ;;
+esac
+
 
 if systemctl status graphical.target | grep -q "Active: active"; then
     
@@ -133,7 +164,7 @@ if systemctl status graphical.target | grep -q "Active: active"; then
 
     if [[ $veracrypt_choice == "y" && $version = "11" ]]; then
         echo "------------ DL + INSTALL VERACRYPT -----------"
-        aria2c https://launchpad.net/veracrypt/trunk/1.25.9/+download/veracrypt-1.25.9-Debian-11-amd64.deb
+        aria2c https://launchpad.net/veracrypt/trunk/1.26.14/+download/veracrypt-1.26.14-Debian-11-amd64.deb
         sudo apt install -y ./veracrypt-*.deb
     fi
 
@@ -145,28 +176,13 @@ if systemctl status graphical.target | grep -q "Active: active"; then
 
     if [[ $exif_cleaner_choice == "y" ]]; then
         echo "------------ DL + INSTALL EXIF-CLEANER -----------"
-        aria2c https://github.com/szTheory/exifcleaner/releases/download/v3.6.0/exifcleaner_3.6.0_amd64.deb
-        dpkg-deb -x exifcleaner_*_amd64.deb unpack
-        dpkg-deb --control exifcleaner_*_amd64.deb 
-        mv DEBIAN unpack
-        cat > ./unpack/DEBIAN/control << "EOF"
-        Package: exifcleaner
-        Version: 3.6.0
-        License: MIT
-        Vendor: szTheory <szTheory@users.noreply.github.com>
-        Architecture: amd64
-        Maintainer: szTheory <szTheory@users.noreply.github.com>
-        Installed-Size: 203446
-        Depends: libgtk-3-0, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0, libuuid1, libayatana-appindicator3-1, libsecret-1-0
-        Section: default
-        Priority: extra
-        Homepage: https://github.com/szTheory/exifcleaner#readme
-        Description: 
-        Clean exif metadata from images, videos, and PDF documents
-        EOF
-        dpkg -b unpack exif-fixed.deb
-        sudo apt install -y ./exif-fixed.deb
-
+        apt install itstool reuse
+        pip3 install mypy pycodestyle pydocstyle --break-system-packages
+        aria2c https://gitlab.com/rmnvgr/metadata-cleaner/-/archive/v2.5.6/metadata-cleaner-v2.5.6.zip
+        unzip metadata-cleaner-v2.5.6.zip
+        cd metadata-cleaner-v2.5.6
+        meson builddir
+        meson install -C builddir
     fi
 fi
 
@@ -241,16 +257,13 @@ cat > /etc/sysctl.conf << "EOF"
 # for what other values do
 #kernel.sysrq=438
 
-net.ipv4.conf.all.arp_filter=1
-kernel.panic_on_oops=1
 kernel.sysrq=0
-kernel.yama.ptrace_scope=3
 fs.file-max =9223372036854775807
 fs.inotify.max_user_watches=524288
 fs.protected_fifos=2
 fs.protected_hardlinks=1
 fs.protected_regular=2
-fs.protected_symlinks=1 
+fs.protected_symlinks=1
 fs.suid_dumpable=0
 kernel.core_uses_pid=1
 kernel.dmesg_restrict=1
@@ -259,10 +272,10 @@ kernel.kptr_restrict=2
 kernel.perf_cpu_time_max_percent=1
 kernel.perf_event_max_sample_rate=1
 kernel.perf_event_paranoid=3
-kernel.pid_max=65536
+kernel.pid_max=4194304
 kernel.randomize_va_space=2
 kernel.unprivileged_bpf_disabled=1
-kernel.unprivileged_userns_clone=0
+kernel.unprivileged_userns_clone=1
 net.core.bpf_jit_harden=2
 net.core.netdev_max_backlog=250000
 net.core.rmem_default=8388608
@@ -308,30 +321,30 @@ net.ipv4.tcp_syncookies=1
 net.ipv4.tcp_timestamps=0
 net.ipv4.tcp_window_scaling=0
 net.ipv4.tcp_wmem=4096 87380 8388608
-#net.ipv6.conf.all.accept_ra=0
-#net.ipv6.conf.all.accept_ra_defrtr=0
-#net.ipv6.conf.all.accept_ra_pinfo=0
-#net.ipv6.conf.all.accept_ra_rtr_pref=0
-#net.ipv6.conf.all.accept_redirects=0
-#net.ipv6.conf.all.accept_source_route=0
-#net.ipv6.conf.all.autoconf=0
-#net.ipv6.conf.all.dad_transmits=0
-#net.ipv6.conf.all.forwarding=0
-#net.ipv6.conf.all.max_addresses=1
-#net.ipv6.conf.all.router_solicitations=0
-#net.ipv6.conf.all.use_tempaddr=2
-#net.ipv6.conf.default.accept_ra=0
-#net.ipv6.conf.default.accept_ra_defrtr=0
-#net.ipv6.conf.default.accept_ra_pinfo=0
-#net.ipv6.conf.default.accept_ra_rtr_pref=0
-#net.ipv6.conf.default.accept_redirects=0
-#net.ipv6.conf.default.accept_source_route=0
-#net.ipv6.conf.default.autoconf=0
-#net.ipv6.conf.default.dad_transmits=0
-#net.ipv6.conf.default.forwarding=0
-#net.ipv6.conf.default.max_addresses=1
-#net.ipv6.conf.default.router_solicitations=0
-#net.ipv6.conf.default.use_tempaddr=2
+net.ipv6.conf.all.accept_ra=0
+net.ipv6.conf.all.accept_ra_defrtr=0
+net.ipv6.conf.all.accept_ra_pinfo=0
+net.ipv6.conf.all.accept_ra_rtr_pref=0
+net.ipv6.conf.all.accept_redirects=0
+net.ipv6.conf.all.accept_source_route=0
+net.ipv6.conf.all.autoconf=0
+net.ipv6.conf.all.dad_transmits=0
+net.ipv6.conf.all.forwarding=0
+net.ipv6.conf.all.max_addresses=1
+net.ipv6.conf.all.router_solicitations=0
+net.ipv6.conf.all.use_tempaddr=2
+net.ipv6.conf.default.accept_ra=0
+net.ipv6.conf.default.accept_ra_defrtr=0
+net.ipv6.conf.default.accept_ra_pinfo=0
+net.ipv6.conf.default.accept_ra_rtr_pref=0
+net.ipv6.conf.default.accept_redirects=0
+net.ipv6.conf.default.accept_source_route=0
+net.ipv6.conf.default.autoconf=0
+net.ipv6.conf.default.dad_transmits=0
+net.ipv6.conf.default.forwarding=0
+net.ipv6.conf.default.max_addresses=1
+net.ipv6.conf.default.router_solicitations=0
+net.ipv6.conf.default.use_tempaddr=2
 vm.mmap_min_addr=65536
 vm.mmap_rnd_bits=32
 vm.mmap_rnd_compat_bits=16
@@ -341,8 +354,11 @@ vm.unprivileged_userfaultfd=0
 vm.max_map_count=1048576
 kernel.core_pattern=|/bin/false
 vm.swappiness=10
-#net.ipv6.conf.default.disable_ipv6=1
-#net.ipv6.conf.all.disable_ipv6=1
+kernel.oops_limit=100
+kernel.warn_limit=100
+user.max_user_namespaces=10
+kernel.yama.ptrace_scope=1
+#should be kernel.yama.ptrace_scope=3 but it break gdb
 
 EOF
 
@@ -394,7 +410,7 @@ GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR=`lsb_release -i -s 2> /dev/null || echo Debian`
 GRUB_CMDLINE_LINUX_DEFAULT="quiet"
-GRUB_CMDLINE_LINUX_DEFAULT="apparmor=1 security=apparmor slab_nomerge slub_debug=FZP init_on_alloc=1 init_on_free=1 page_alloc.shuffle=1 pti=on vsyscall=none debugfs=off oops=panic module.sig_enforce=1 lockdown=confidentiality lsm=lockdown,yama,apparmor mce=0 quiet loglevel=0 spectre_v2=on spec_store_bypass_disable=seccomp tsx=off tsx_async_abort=full,nosmt mds=full,nosmt l1tf=full,force l1d_flush=on nosmt=force kvm.nx_huge_pages=force random.trust_cpu=off intel_iommu=on randomize_kstack_offset=1 page_poison=on rng_core.default_quality=500 ipv6.disable=1"
+GRUB_CMDLINE_LINUX_DEFAULT="apparmor=1 security=apparmor slub_debug=F oops=panic module.sig_enforce=1 lockdown=confidentiality lsm=lockdown,yama,apparmor mce=0 intel_iommu=on cfi=kcfi spectre_v2_user=on srbds=on spec_rstack_overflow=on"
 
 # Uncomment to enable BadRAM filtering, modify to suit your needs
 # This works with Linux (no patch required) and with any kernel that obtains
@@ -628,73 +644,6 @@ echo "@includedir /etc/sudoers.d" >> /etc/sudoers
 
 
 echo "Les autorisations de mise à jour du système ont été accordées à l'utilisateur $user."
-
-
-cat > /etc/sudoers << "EOF"
-
-#
-# This file MUST be edited with the 'visudo' command as root.
-#
-# Please consider adding local content in /etc/sudoers.d/ instead of
-# directly modifying this file.
-#
-# See the man page for details on how to write a sudoers file.
-#
-Defaults	env_reset
-Defaults	mail_badpass
-Defaults	secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-# This fixes CVE-2005-4890 and possibly breaks some versions of kdesu
-# (#1011624, https://bugs.kde.org/show_bug.cgi?id=452532)
-Defaults	use_pty
-
-# This preserves proxy settings from user environments of root
-# equivalent users (group sudo)
-#Defaults:%sudo env_keep += "http_proxy https_proxy ftp_proxy all_proxy no_proxy"
-
-# This allows running arbitrary commands, but so does ALL, and it means
-# different sudoers have their choice of editor respected.
-#Defaults:%sudo env_keep += "EDITOR"
-
-# Completely harmless preservation of a user preference.
-#Defaults:%sudo env_keep += "GREP_COLOR"
-
-# While you shouldn't normally run git as root, you need to with etckeeper
-#Defaults:%sudo env_keep += "GIT_AUTHOR_* GIT_COMMITTER_*"
-
-# Per-user preferences; root won't have sensible values for them.
-#Defaults:%sudo env_keep += "EMAIL DEBEMAIL DEBFULLNAME"
-
-# "sudo scp" or "sudo rsync" should be able to use your SSH agent.
-#Defaults:%sudo env_keep += "SSH_AGENT_PID SSH_AUTH_SOCK"
-
-# Ditto for GPG agent
-#Defaults:%sudo env_keep += "GPG_AGENT_INFO"
-
-# Host alias specification
-
-# User alias specification
-
-# Cmnd alias specification
-
-# User privilege specification
-root	ALL=(ALL:ALL) ALL
-
-# Allow members of group sudo to execute any command
-%sudo	ALL=(ALL:ALL) ALL
-
-# See sudoers(5) for more information on "@include" directives:
-
-
-Cmnd_Alias UPDATE = /usr/bin/apt-get update
-Cmnd_Alias UPGRADE = /usr/bin/apt-get dist-upgrade
-Cmnd_Alias AUTOREMOVE = /usr/bin/apt-get autoremove
-Cmnd_Alias AUTOCLEAN = /usr/bin/apt-get autoclean
-Cmnd_Alias REBOOT = /sbin/reboot ""
-Cmnd_Alias SHUTDOWN = /sbin/poweroff ""
-
-@includedir /etc/sudoers.d
-EOF
 
 update-grub && update-grub2
 
